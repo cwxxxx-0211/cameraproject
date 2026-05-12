@@ -1,0 +1,14 @@
+D:\project\My project\Tools\PcReceiver\bin\Debug\net8.0\PcReceiver.exe
+D:\project\My project\Tools\PcReceiver\bin\Debug\net8.0\PcReceiver.deps.json
+D:\project\My project\Tools\PcReceiver\bin\Debug\net8.0\PcReceiver.runtimeconfig.json
+D:\project\My project\Tools\PcReceiver\bin\Debug\net8.0\PcReceiver.dll
+D:\project\My project\Tools\PcReceiver\bin\Debug\net8.0\PcReceiver.pdb
+D:\project\My project\Tools\PcReceiver\obj\Debug\net8.0\PcReceiver.GeneratedMSBuildEditorConfig.editorconfig
+D:\project\My project\Tools\PcReceiver\obj\Debug\net8.0\PcReceiver.AssemblyInfoInputs.cache
+D:\project\My project\Tools\PcReceiver\obj\Debug\net8.0\PcReceiver.AssemblyInfo.cs
+D:\project\My project\Tools\PcReceiver\obj\Debug\net8.0\PcReceiver.csproj.CoreCompileInputs.cache
+D:\project\My project\Tools\PcReceiver\obj\Debug\net8.0\PcReceiver.dll
+D:\project\My project\Tools\PcReceiver\obj\Debug\net8.0\refint\PcReceiver.dll
+D:\project\My project\Tools\PcReceiver\obj\Debug\net8.0\PcReceiver.pdb
+D:\project\My project\Tools\PcReceiver\obj\Debug\net8.0\PcReceiver.genruntimeconfig.cache
+D:\project\My project\Tools\PcReceiver\obj\Debug\net8.0\ref\PcReceiver.dll

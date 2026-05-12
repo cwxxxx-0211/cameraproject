@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools"
+          package="com.gzshixiang.gxrsdk_android_plugin"
+
+          >
+<!--    android:sharedUserId="android.uid.system"-->
+
+    <application android:hardwareAccelerated="false" android:requestLegacyExternalStorage="true">
+
+        <!-- 沉浸式应用 -->
+        <meta-data android:name="metadata.is3DApp" android:value="true" />
+
+        <!--
+        不要直接修改 AndroidManifest.xml。
+        在Build的时候会使用 AndroidManifestPhone.xml 或者 AndroidManifestAndroidBox.xml 去替换 AndroidManifest.xml。
+        -->
+
+        <!-- 主控模式，直接启动unity -->
+        <activity android:name="com.gzshixiang.gxrsdk_android_plugin.UnityPlayerActivity"
+            android:launchMode="singleInstance"
+            android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <meta-data
+                android:name="unityplayer.UnityActivity"
+                android:value="true" />
+        </activity>
+        <!-- 主控模式 -->
+
+    </application>
+
+</manifest>

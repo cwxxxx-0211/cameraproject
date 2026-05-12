@@ -1,0 +1,79 @@
+apply plugin: 'com.android.application'
+
+dependencies {
+    implementation project(':unityLibrary')
+
+    implementation 'androidx.constraintlayout:constraintlayout:2.0.4'
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    }
+
+android {
+	ndkPath "**NDKPATH**"
+    namespace "**NAMESPACE**"
+    compileSdkVersion **APIVERSION**
+    buildToolsVersion '**BUILDTOOLS**'
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    defaultConfig {
+        minSdkVersion **MINSDKVERSION**
+        targetSdkVersion **TARGETSDKVERSION**
+        applicationId '**APPLICATIONID**'
+        ndk {
+            abiFilters **ABIFILTERS**
+        }
+        versionCode **VERSIONCODE**
+        versionName '**VERSIONNAME**'
+    }
+
+    aaptOptions {
+        noCompress = **BUILTIN_NOCOMPRESS** + unityStreamingAssets.tokenize(', ')
+        ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~"
+    }**SIGN**
+
+    lintOptions {
+        abortOnError false
+    }
+
+     packagingOptions {
+        doNotStrip '*/arm64-v8a/*.so'
+        pickFirst 'lib/arm64-v8a/libomp.so'
+        pickFirst 'lib/arm64-v8a/libjpeg-turbo1500.so'
+        pickFirst 'lib/arm64-v8a/libturbojpeg.so'
+        pickFirst 'lib/armeabi-v7a/libturbojpeg.so'
+        pickFirst 'lib/arm64-v8a/libusb100.so'
+        pickFirst 'lib/arm64-v8a/libusb.so'
+        //若手机版本有使用到摄像头等数据，则需要考虑以哪个uvc 库为准！！！
+        pickFirst 'lib/arm64-v8a/libuvc.so'
+        pickFirst 'lib/arm64-v8a/libc++_shared.so'
+        pickFirst 'lib/armeabi-v7a/libc++_shared.so'
+        pickFirst 'lib/arm64-v8a/libipsea.so'
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled **MINIFY_DEBUG**
+            proguardFiles getDefaultProguardFile('proguard-android.txt')**SIGNCONFIG**
+            jniDebuggable true
+        }
+        release {
+            minifyEnabled **MINIFY_RELEASE**
+            proguardFiles getDefaultProguardFile('proguard-android.txt')**SIGNCONFIG**
+        }
+    }**PACKAGING_OPTIONS****PLAY_ASSET_PACKS****SPLITS**
+**BUILT_APK_LOCATION**
+    bundle {
+        language {
+            enableSplit = false
+        }
+        density {
+            enableSplit = false
+        }
+        abi {
+            enableSplit = true
+        }
+    }
+}**SPLITS_VERSION_CODE****LAUNCHER_SOURCE_BUILD_SETUP**

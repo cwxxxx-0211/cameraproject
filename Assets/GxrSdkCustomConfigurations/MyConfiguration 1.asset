@@ -1,0 +1,62 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f99fc95053f74263bd8090b65dd19a09, type: 3}
+  m_Name: MyConfiguration 1
+  m_EditorClassIdentifier: 
+  isCustomized: 1
+  androidDevice: 0
+  useCustomAndroidManifest: 0
+  stopServicesWhenTakeOff: 1
+  glassesDofType: 1
+  controllerType: 2
+  motionControllerPrefab: {fileID: 1271783022308777280, guid: 8d2115353de372e48a8a5f065316cbbc, type: 3}
+  motionControllerLocalPosition: {x: 0.02, y: -0.4, z: 0}
+  controllerDisplayMode: 0
+  autoDisappearTime: 10
+  useMouseAsController: 0
+  displayMotionController: 1
+  defaultPointerPrefab: {fileID: 605023273110938410, guid: 97901ae382670cb4bbecb23abdb23fc1, type: 3}
+  maxRaycastDistance: 10
+  pointerLockTargetWhenDrag: 1
+  displayPointer: 1
+  defaultCursorPrefab: {fileID: 5357455127825033462, guid: 58f783dd16bf00945af4f71658bb81a7, type: 3}
+  displayCursor: 1
+  gazePrefab: {fileID: 6852165567272737459, guid: c9f444ec6fdf8b045830c14c8c696b6f, type: 3}
+  gazePointerPrefab: {fileID: 605023273110938410, guid: 5bfde20d5171d0545b958b224279480e, type: 3}
+  gazeCursorPrefab: {fileID: 5357455127825033462, guid: 1681a5f5da9841f47bbf0b23307b72eb, type: 3}
+  handPrefab: {fileID: 6852165567272737459, guid: 323c9760a8e91c84eb672b1f5be41040, type: 3}
+  gestureLevel: 0
+  headDisplayPrefab: {fileID: 8919455505974798271, guid: 215639bca1f6d8c43b13a95e7803fd0c, type: 3}
+  glassesMode: 1
+  targetFrameRate: 60
+  enableNativeRender: 1
+  enableBorderMask: 0
+  enableTrackingSystem: 0
+  enableImageTracking: 0
+  enableObjectTracking: 0
+  enablePlaneTracking: 0
+  defaultPlanePrefab: {fileID: 1832140234089224101, guid: 0ac86fcab88e14583b15c116130404ef, type: 3}
+  enableCameraSystem: 1
+  enableRgbCamera: 1
+  enableRgbCameraPreview: 1
+  enableFishEyeCamera: 1
+  enableFishEyeCameraPreview: 0
+  enableDeviceSystem: 1
+  enableLowBatteryWarning: 1
+  logLevel: 1
+  enableDebugConsole: 0
+  showProfiler: 0
+  enableQuitDialog: 1
+  quitDialogPrefab: {fileID: 5374057812741469164, guid: 7ec7fcf43d7fffb4196cae9a67737399, type: 3}
+  useMrtk: 0
+  enableXrSdk: 0
+  useInputDeviceInEditor: 0
