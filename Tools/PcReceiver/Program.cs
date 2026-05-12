@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Threading;
+using OpenCvSharp;
 
 // -----------------------------------------------------------------------------
 // PcReceiver（PC 端最小可用接收器）
@@ -10,16 +12,23 @@ using System.Net.Sockets;
 // 作用：
 // - 作为 Unity 端 `GxrRgbTcpStreamer` 的配套接收端，在 PC 上监听一个 TCP 端口；
 // - 按约定协议接收一帧一帧的 JPEG 数据；
-// - 把“最新的一帧”写到磁盘文件（默认 latest.jpg），方便你用任意工具查看/处理。
+// - 直接在内存中解码 JPEG 并弹窗实时显示（不再写 latest.jpg）。
 //
 // 用法：
-// - 不带参数：监听 5001，输出 latest.jpg
+// - 不带参数：监听 5001，并打开 OpenCV 窗口显示画面
 // - 参数 1：端口号，例如：PcReceiver.exe 5001
-// - 参数 2：输出路径，例如：PcReceiver.exe 5001 D:\temp\latest.jpg
 //
 // 注意：
 // - 这是“最小可用”的接收器：一次只处理一个客户端连接；断开后继续等待下一个连接。
 // - TCP 是字节流协议：一次 Read 不一定读满你想要的字节数，所以必须循环读取直到满足长度。
+// - 若把 ImShow/解码放在网络读循环中，会拖慢 ReadExactly，导致 TCP 缓冲堆积、延迟越来越高。
+//   因此这里采用“生产者-消费者”模型：
+//   - 网络接收线程（生产者）：只负责 ReadExactly + 把 payload 入队；
+//   - UI/渲染线程（消费者，主线程）：从队列取最新帧，丢弃积压旧帧，解码并 ImShow。
+//
+// OpenCV 依赖：
+// - 需要在此 PC 工程（Tools/PcReceiver）中安装 OpenCvSharp4 与 OpenCvSharp4.runtime.win
+//  （通过 Visual Studio 的 NuGet 管理器或直接编辑 csproj）。
 //
 // 传输协议（Little-Endian，小端；与 Unity 端保持一致）：
 // - Header 固定长度 28 字节：
@@ -44,12 +53,12 @@ static class Program
 
     static int Main(string[] args)
     {
-        // 解析命令行参数：端口号与输出文件路径。
+        // 解析命令行参数：端口号。
         // 这里使用 int.Parse：如果传入非法端口会抛异常并终止程序（符合“最小可用”定位）。
         var port = args.Length >= 1 ? int.Parse(args[0]) : 5001;
-        var outputPath = args.Length >= 2 ? args[1] : "latest.jpg";
+        var windowName = "AR Glasses Real-Time Stream";
 
-        Console.WriteLine($"[PcReceiver] listen :{port}, output={outputPath}");
+        Console.WriteLine($"[PcReceiver] listen :{port}, window=\"{windowName}\"");
 
         // 监听任意网卡（IPAddress.Any）上的指定端口。
         // 如需只允许本机连接，可改为 IPAddress.Loopback（但这里按“最小可用”保持简单）。
@@ -70,7 +79,7 @@ static class Program
             {
                 using var stream = client.GetStream();
                 // 单连接会话：持续读取并处理帧，直到断开或出错。
-                RunSession(stream, outputPath);
+                RunSession(stream, windowName);
             }
             catch (Exception e)
             {
@@ -81,56 +90,129 @@ static class Program
         }
     }
 
-    private static void RunSession(NetworkStream stream, string outputPath)
+    private static void RunSession(NetworkStream stream, string windowName)
     {
+        // 用一个线程安全队列传递“收到的 JPEG payload”（生产者-消费者）。
+        // 注意：为了降低延迟，消费者会主动丢弃积压，只取“最新的一帧”。
+        var queue = new ConcurrentQueue<byte[]>();
+        using var cts = new CancellationTokenSource();
+
         // 固定头部长度（与发送端一致）：
         // 4(Magic) + 1(Version) + 3(Reserved) + 8(Timestamp) + 4(Width) + 4(Height) + 4(PayloadLength) = 28
         var header = new byte[4 + 1 + 3 + 8 + 4 + 4 + 4];
-        // 用于统计 FPS：每满 1 秒输出一次本秒内接收到的帧率与最后一帧的关键信息。
-        var sw = Stopwatch.StartNew();
-        var frameCount = 0;
 
-        while (true)
+        // 接收端诊断：统计“收到的帧率”（生产者侧）与“显示的帧率”（消费者侧）。
+        var recvSw = Stopwatch.StartNew();
+        var showSw = Stopwatch.StartNew();
+        var recvCount = 0;
+        var showCount = 0;
+        var lastMeta = (timestamp: 0UL, width: 0, height: 0, bytes: 0);
+
+        // 生产者：只负责从网络读完整协议，并把 payload 入队；不要做解码/显示。
+        var receiverThread = new Thread(() =>
         {
-            // 从 TCP 流中“精确读取”一个完整 header（TCP 不保证一次 Read 就能拿到完整 header）。
-            ReadExactly(stream, header, 0, header.Length);
-
-            // 校验魔数：若不匹配，说明连接数据不是本协议（或被破坏/错位）。
-            if (header[0] != Magic[0] || header[1] != Magic[1] || header[2] != Magic[2] || header[3] != Magic[3])
-                throw new InvalidDataException("bad magic");
-
-            // 协议版本：便于后续升级兼容（目前仅支持 version=1）。
-            var version = header[4];
-            if (version != 1)
-                throw new InvalidDataException($"unsupported version: {version}");
-
-            // 依照约定的偏移读取字段（全部为小端序）。
-            // timestamp 一般来自相机/SDK 的时间戳；width/height 是源帧尺寸；payloadLen 是 JPEG 字节数。
-            var timestamp = ReadU64LE(header, 8);
-            var width = ReadI32LE(header, 16);
-            var height = ReadI32LE(header, 20);
-            var payloadLen = ReadI32LE(header, 24);
-
-            // 基本健壮性校验：避免出现负数/超大长度导致内存分配异常或 OOM。
-            if (payloadLen <= 0 || payloadLen > 50 * 1024 * 1024)
-                throw new InvalidDataException($"bad payloadLen: {payloadLen}");
-
-            // 读取 payload（JPEG 数据本体）。这里按长度一次性分配数组，简单直观。
-            var payload = new byte[payloadLen];
-            ReadExactly(stream, payload, 0, payloadLen);
-
-            // 输出最新帧文件（最简单的“显示/处理”入口：任何程序都能读 jpg）
-            File.WriteAllBytes(outputPath, payload);
-
-            frameCount++;
-            if (sw.ElapsedMilliseconds >= 1000)
+            try
             {
-                // fps = 本段时间内帧数 / 秒数。这里用毫秒避免浮点误差累积。
-                var fps = frameCount * 1000.0 / sw.ElapsedMilliseconds;
-                Console.WriteLine($"[PcReceiver] fps={fps:F1} last={width}x{height} bytes={payloadLen} ts={timestamp}");
-                frameCount = 0;
-                sw.Restart();
+                while (!cts.IsCancellationRequested)
+                {
+                    ReadExactly(stream, header, 0, header.Length);
+
+                    if (header[0] != Magic[0] || header[1] != Magic[1] || header[2] != Magic[2] || header[3] != Magic[3])
+                        throw new InvalidDataException("bad magic");
+
+                    var version = header[4];
+                    if (version != 1)
+                        throw new InvalidDataException($"unsupported version: {version}");
+
+                    var timestamp = ReadU64LE(header, 8);
+                    var width = ReadI32LE(header, 16);
+                    var height = ReadI32LE(header, 20);
+                    var payloadLen = ReadI32LE(header, 24);
+
+                    if (payloadLen <= 0 || payloadLen > 50 * 1024 * 1024)
+                        throw new InvalidDataException($"bad payloadLen: {payloadLen}");
+
+                    var payload = new byte[payloadLen];
+                    ReadExactly(stream, payload, 0, payloadLen);
+
+                    queue.Enqueue(payload);
+                    recvCount++;
+                    lastMeta = (timestamp, width, height, payloadLen);
+                }
             }
+            catch (Exception e)
+            {
+                // 任何异常（断线、协议错误等）都通知主线程退出消费循环并清理窗口。
+                Console.WriteLine($"[PcReceiver] recv thread error: {e.Message}");
+                try { cts.Cancel(); } catch { /* ignore */ }
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "PcReceiver.NetworkReceiver"
+        };
+        receiverThread.Start();
+
+        // 消费者/UI：从队列取数据，“只保留最新帧”，再用 OpenCV 解码并显示。
+        // OpenCV 的 HighGUI（ImShow/WaitKey）需要持续调用 WaitKey 来处理窗口消息，否则窗口可能不刷新/无响应。
+        try
+        {
+            Cv2.NamedWindow(windowName, WindowFlags.AutoSize);
+
+            while (!cts.IsCancellationRequested)
+            {
+                // 取最新帧：先拿到一帧作为候选，然后把队列里积压的都丢掉，只保留最后一个。
+                if (!queue.TryDequeue(out var payload))
+                {
+                    // 没帧也要调用 WaitKey 处理窗口事件；同时让出一点 CPU。
+                    Cv2.WaitKey(1);
+                    Thread.Sleep(1);
+                    continue;
+                }
+
+                while (queue.TryDequeue(out var newer))
+                {
+                    payload = newer;
+                }
+
+                // 在内存中解码 JPEG -> Mat，并显示。
+                // ImDecode 会分配 Mat 内部内存；用 using 及时释放，避免长时间运行内存上涨。
+                using var frame = Cv2.ImDecode(payload, ImreadModes.Color);
+                if (!frame.Empty())
+                {
+                    Cv2.ImShow(windowName, frame);
+                }
+
+                // 1ms 轮询，既刷新 UI 也能捕获按键（例如窗口聚焦时按 ESC 退出）。
+                // 约定：按 ESC 退出当前会话（不退出整个进程，会回到等待下一个 client）。
+                var key = Cv2.WaitKey(1);
+                if (key == 27) // ESC
+                {
+                    Console.WriteLine("[PcReceiver] ESC pressed, closing session...");
+                    break;
+                }
+
+                showCount++;
+
+                // 每秒输出一次诊断信息（接收 fps / 显示 fps / 最后一帧信息）。
+                if (recvSw.ElapsedMilliseconds >= 1000 || showSw.ElapsedMilliseconds >= 1000)
+                {
+                    var recvFps = recvCount * 1000.0 / Math.Max(1, recvSw.ElapsedMilliseconds);
+                    var showFps = showCount * 1000.0 / Math.Max(1, showSw.ElapsedMilliseconds);
+                    Console.WriteLine($"[PcReceiver] recv_fps={recvFps:F1} show_fps={showFps:F1} last={lastMeta.width}x{lastMeta.height} bytes={lastMeta.bytes} ts={lastMeta.timestamp}");
+                    recvCount = 0;
+                    showCount = 0;
+                    recvSw.Restart();
+                    showSw.Restart();
+                }
+            }
+        }
+        finally
+        {
+            // 退出会话：通知接收线程停止，关闭 OpenCV 窗口。
+            try { cts.Cancel(); } catch { /* ignore */ }
+            try { receiverThread.Join(500); } catch { /* ignore */ }
+            try { Cv2.DestroyWindow(windowName); } catch { /* ignore */ }
         }
     }
 

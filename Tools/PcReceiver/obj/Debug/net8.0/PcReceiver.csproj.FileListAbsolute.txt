@@ -12,3 +12,11 @@ D:\project\My project\Tools\PcReceiver\obj\Debug\net8.0\refint\PcReceiver.dll
 D:\project\My project\Tools\PcReceiver\obj\Debug\net8.0\PcReceiver.pdb
 D:\project\My project\Tools\PcReceiver\obj\Debug\net8.0\PcReceiver.genruntimeconfig.cache
 D:\project\My project\Tools\PcReceiver\obj\Debug\net8.0\ref\PcReceiver.dll
+D:\project\My project\Tools\PcReceiver\bin\Debug\net8.0\OpenCvSharp.dll
+D:\project\My project\Tools\PcReceiver\bin\Debug\net8.0\runtimes\win-x64\native\OpenCvSharpExtern.dll
+D:\project\My project\Tools\PcReceiver\bin\Debug\net8.0\runtimes\win-x64\native\opencv_videoio_ffmpeg4100_64.dll
+D:\project\My project\Tools\PcReceiver\bin\Debug\net8.0\runtimes\win-x86\native\OpenCvSharpExtern.dll
+D:\project\My project\Tools\PcReceiver\bin\Debug\net8.0\runtimes\win-x86\native\opencv_videoio_ffmpeg4100.dll
+D:\project\My project\Tools\PcReceiver\obj\Debug\net8.0\PcReceiver.csproj.AssemblyReference.cache
+D:\project\My project\Tools\PcReceiver\obj\Debug\net8.0\PcReceiver.sourcelink.json
+D:\project\My project\Tools\PcReceiver\obj\Debug\net8.0\PcReceiver.csproj.Up2Date

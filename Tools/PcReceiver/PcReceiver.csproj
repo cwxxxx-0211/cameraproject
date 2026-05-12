@@ -5,5 +5,14 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
-</Project>
 
+  <!--
+    OpenCV GUI + JPEG 内存解码依赖：
+    - OpenCvSharp4：C# OpenCV 封装
+    - OpenCvSharp4.runtime.win：Windows 原生运行时（opencv_world*.dll 等）
+  -->
+  <ItemGroup>
+    <PackageReference Include="OpenCvSharp4" Version="4.10.0.20240616" />
+    <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.10.0.20240616" />
+  </ItemGroup>
+</Project>
