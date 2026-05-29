@@ -119,7 +119,16 @@ public sealed class RuntimeModelViewer : MonoBehaviour
 
             loadedModel.AddComponent<GxrManipulatable>();
 
+            GxrStaticGestureModelController gestureController = FindObjectOfType<GxrStaticGestureModelController>();
+            if (gestureController == null)
+            {
+                GameObject gestureControllerObject = new GameObject("GXR Static Gesture Model Controller");
+                gestureController = gestureControllerObject.AddComponent<GxrStaticGestureModelController>();
+                DontDestroyOnLoad(gestureControllerObject);
+            }
+
             PlaceModel(loadedModel);
+            gestureController.SetTarget(loadedModel.transform);
             Debug.Log("[RuntimeModelViewer] Loaded PLY: " + path);
         }
         catch (Exception ex)
