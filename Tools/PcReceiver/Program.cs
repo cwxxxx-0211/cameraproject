@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -54,7 +54,11 @@ static class Program
     private static void RunSession(NetworkStream stream, string windowName)
     {
         var queue = new ConcurrentQueue<byte[]>();
+<<<<<<< HEAD
         using var saveQueue = new BlockingCollection<SaveItem>(new ConcurrentQueue<SaveItem>());
+=======
+        var saveQueue = new ConcurrentQueue<SaveItem>();
+>>>>>>> 286f827af0c62ad2275ca4050ad125ac9f31f195
         using var cts = new CancellationTokenSource();
 
         var header = new byte[28];
@@ -120,8 +124,19 @@ static class Program
             VideoWriter videoWriter = null;
             try
             {
+<<<<<<< HEAD
                 foreach (var item in saveQueue.GetConsumingEnumerable())
                 {
+=======
+                while (!cts.IsCancellationRequested || !saveQueue.IsEmpty)
+                {
+                    if (!saveQueue.TryDequeue(out var item))
+                    {
+                        Thread.Sleep(1);
+                        continue;
+                    }
+
+>>>>>>> 286f827af0c62ad2275ca4050ad125ac9f31f195
                     try
                     {
                         // 在收到第一帧时初始化 VideoWriter，因为我们需要知道准确的宽高
@@ -131,7 +146,11 @@ static class Program
                             // mp4v 编码器广泛支持生成 mp4
                             var fourcc = VideoWriter.FourCC('m', 'p', '4', 'v'); 
                             
+<<<<<<< HEAD
                             videoWriter = new VideoWriter(videoFilePath, fourcc, VideoFps, size, isColor: true);
+=======
+                            videoWriter = new VideoWriter(videoFilePath, fourcc, VideoFps, size);
+>>>>>>> 286f827af0c62ad2275ca4050ad125ac9f31f195
                             if (!videoWriter.IsOpened())
                             {
                                 Console.WriteLine("[PcReceiver] Failed to open VideoWriter!");
@@ -172,7 +191,11 @@ static class Program
             }
         })
         {
+<<<<<<< HEAD
             IsBackground = false, // 确保退出前能把 MP4 尾部写完（moov atom）
+=======
+            IsBackground = true,
+>>>>>>> 286f827af0c62ad2275ca4050ad125ac9f31f195
             Name = "PcReceiver.VideoSaver"
         };
         saverThread.Start();
@@ -207,6 +230,7 @@ static class Program
                     Cv2.ImShow(windowName, corrected);
 
                     // 持续将渲染出的最新画面塞入保存队列
+<<<<<<< HEAD
                     // 若正在收尾（CompleteAdding）则丢弃，避免异常
                     if (!saveQueue.IsAddingCompleted)
                     {
@@ -219,6 +243,9 @@ static class Program
                             // ignore: adding completed
                         }
                     }
+=======
+                    saveQueue.Enqueue(new SaveItem(showCount, corrected.Clone()));
+>>>>>>> 286f827af0c62ad2275ca4050ad125ac9f31f195
                 }
 
                 var key = Cv2.WaitKey(1);
@@ -246,10 +273,19 @@ static class Program
         {
             try { cts.Cancel(); } catch { /* ignore */ }
             try { receiverThread.Join(500); } catch { /* ignore */ }
+<<<<<<< HEAD
 
             // 让保存线程“确定性”收尾：停止添加 -> 等待线程写完并释放 VideoWriter
             try { saveQueue.CompleteAdding(); } catch { /* ignore */ }
             try { saverThread.Join(); } catch { /* ignore */ }
+=======
+            try { saverThread.Join(1000); } catch { /* ignore */ } // 给保存线程多一点时间处理尾盘
+
+            while (saveQueue.TryDequeue(out var mat))
+            {
+                try { mat.Mat.Dispose(); } catch { /* ignore */ }
+            }
+>>>>>>> 286f827af0c62ad2275ca4050ad125ac9f31f195
 
             try { Cv2.DestroyWindow(windowName); } catch { /* ignore */ }
         }
