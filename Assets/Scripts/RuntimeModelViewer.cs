@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using GxrSdk;
 using UnityEngine;
 
 public sealed class RuntimeModelViewer : MonoBehaviour
@@ -111,7 +112,12 @@ public sealed class RuntimeModelViewer : MonoBehaviour
             meshRenderer.sharedMaterial = defaultMaterial != null ? defaultMaterial : CreateDefaultMaterial();
 
             loadedModel.AddComponent<BoxCollider>();
-            loadedModel.AddComponent<ModelManipulator>();
+
+            Rigidbody rigidbody = loadedModel.AddComponent<Rigidbody>();
+            rigidbody.isKinematic = true;
+            rigidbody.useGravity = false;
+
+            loadedModel.AddComponent<GxrManipulatable>();
 
             PlaceModel(loadedModel);
             Debug.Log("[RuntimeModelViewer] Loaded PLY: " + path);
