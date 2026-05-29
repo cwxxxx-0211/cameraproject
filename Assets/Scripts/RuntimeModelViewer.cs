@@ -4,7 +4,10 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using GxrSdk;
+using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 public sealed class RuntimeModelViewer : MonoBehaviour
 {
@@ -17,13 +20,25 @@ public sealed class RuntimeModelViewer : MonoBehaviour
     [SerializeField] private float targetSizeMeters = 0.8f;
     [SerializeField] private Material defaultMaterial;
 
+    [Header("File Picker")]
+    [SerializeField] private bool showFilePicker = true;
+    [SerializeField] private bool autoLoadFirstModel = false;
+    [SerializeField] private float filePickerDistanceFromCamera = 1.4f;
+    [SerializeField] private Vector2 filePickerSize = new Vector2(260f, 160f);
+
     private GameObject loadedModel;
+    private Canvas filePickerCanvas;
+    private RectTransform fileListRoot;
 
     private IEnumerator Start()
     {
         EnsureSceneBasics();
         yield return WaitForViewReference();
-        LoadFirstSupportedModel();
+        RefreshFilePicker();
+        if (autoLoadFirstModel)
+        {
+            LoadFirstSupportedModel();
+        }
     }
 
     private IEnumerator WaitForViewReference()
@@ -51,25 +66,31 @@ public sealed class RuntimeModelViewer : MonoBehaviour
             return;
         }
 
-        string[] files = Directory.GetFiles(directory);
-        Array.Sort(files, StringComparer.OrdinalIgnoreCase);
-
+        string[] files = GetSupportedModelFiles(directory);
         foreach (string file in files)
         {
-            string extension = Path.GetExtension(file).ToLowerInvariant();
-            if (extension == ".ply")
-            {
-                LoadPly(file);
-                return;
-            }
-
-            if (extension == ".glb")
-            {
-                Debug.LogWarning("[RuntimeModelViewer] Found GLB, but no runtime GLB loader is installed. Convert it to ASCII PLY or add glTFast later: " + file);
-            }
+            LoadModel(file);
+            return;
         }
 
-        Debug.LogWarning("[RuntimeModelViewer] No supported .ply model found in: " + directory);
+        Debug.LogWarning("[RuntimeModelViewer] No supported .ply or .obj model found in: " + directory);
+    }
+
+    public void LoadModel(string path)
+    {
+        string extension = Path.GetExtension(path).ToLowerInvariant();
+        if (extension == ".ply")
+        {
+            LoadPly(path);
+        }
+        else if (extension == ".obj")
+        {
+            LoadObj(path);
+        }
+        else
+        {
+            Debug.LogWarning("[RuntimeModelViewer] Unsupported model type: " + path);
+        }
     }
 
     private string GetModelDirectory()
@@ -97,44 +118,81 @@ public sealed class RuntimeModelViewer : MonoBehaviour
                 return;
             }
 
-            if (loadedModel != null)
-            {
-                Destroy(loadedModel);
-            }
+            GameObject model = new GameObject(Path.GetFileNameWithoutExtension(path));
+            model.transform.SetParent(transform, false);
 
-            loadedModel = new GameObject(Path.GetFileNameWithoutExtension(path));
-            loadedModel.transform.SetParent(transform, false);
-
-            MeshFilter meshFilter = loadedModel.AddComponent<MeshFilter>();
+            MeshFilter meshFilter = model.AddComponent<MeshFilter>();
             meshFilter.sharedMesh = mesh;
 
-            MeshRenderer meshRenderer = loadedModel.AddComponent<MeshRenderer>();
+            MeshRenderer meshRenderer = model.AddComponent<MeshRenderer>();
             meshRenderer.sharedMaterial = defaultMaterial != null ? defaultMaterial : CreateDefaultMaterial();
 
-            loadedModel.AddComponent<BoxCollider>();
-
-            Rigidbody rigidbody = loadedModel.AddComponent<Rigidbody>();
-            rigidbody.isKinematic = true;
-            rigidbody.useGravity = false;
-
-            loadedModel.AddComponent<GxrManipulatable>();
-
-            GxrStaticGestureModelController gestureController = FindObjectOfType<GxrStaticGestureModelController>();
-            if (gestureController == null)
-            {
-                GameObject gestureControllerObject = new GameObject("GXR Static Gesture Model Controller");
-                gestureController = gestureControllerObject.AddComponent<GxrStaticGestureModelController>();
-                DontDestroyOnLoad(gestureControllerObject);
-            }
-
-            PlaceModel(loadedModel);
-            gestureController.SetTarget(loadedModel.transform);
+            PrepareLoadedModel(model);
+            HideFilePicker();
             Debug.Log("[RuntimeModelViewer] Loaded PLY: " + path);
         }
         catch (Exception ex)
         {
             Debug.LogError("[RuntimeModelViewer] PLY load error: " + ex.Message);
         }
+    }
+
+    private void LoadObj(string path)
+    {
+        try
+        {
+            ObjLoader.Result result = ObjLoader.Load(path, defaultMaterial != null ? defaultMaterial : CreateDefaultMaterial());
+            if (result.Mesh == null)
+            {
+                Debug.LogError("[RuntimeModelViewer] Failed to load OBJ: " + path);
+                return;
+            }
+
+            GameObject model = new GameObject(Path.GetFileNameWithoutExtension(path));
+            model.transform.SetParent(transform, false);
+
+            MeshFilter meshFilter = model.AddComponent<MeshFilter>();
+            meshFilter.sharedMesh = result.Mesh;
+
+            MeshRenderer meshRenderer = model.AddComponent<MeshRenderer>();
+            meshRenderer.sharedMaterials = result.Materials;
+
+            PrepareLoadedModel(model);
+            HideFilePicker();
+            Debug.Log("[RuntimeModelViewer] Loaded OBJ: " + path);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("[RuntimeModelViewer] OBJ load error: " + ex.Message);
+        }
+    }
+
+    private void PrepareLoadedModel(GameObject model)
+    {
+        if (loadedModel != null)
+        {
+            Destroy(loadedModel);
+        }
+
+        loadedModel = model;
+        loadedModel.AddComponent<BoxCollider>();
+
+        Rigidbody rigidbody = loadedModel.AddComponent<Rigidbody>();
+        rigidbody.isKinematic = true;
+        rigidbody.useGravity = false;
+
+        loadedModel.AddComponent<GxrManipulatable>();
+
+        GxrStaticGestureModelController gestureController = FindObjectOfType<GxrStaticGestureModelController>();
+        if (gestureController == null)
+        {
+            GameObject gestureControllerObject = new GameObject("GXR Static Gesture Model Controller");
+            gestureController = gestureControllerObject.AddComponent<GxrStaticGestureModelController>();
+            DontDestroyOnLoad(gestureControllerObject);
+        }
+
+        PlaceModel(loadedModel);
+        gestureController.SetTarget(loadedModel.transform);
     }
 
     private void PlaceModel(GameObject model)
@@ -161,6 +219,213 @@ public sealed class RuntimeModelViewer : MonoBehaviour
             model.transform.position = viewTransform.position + viewTransform.forward * distanceFromCamera;
             model.transform.rotation = Quaternion.LookRotation(viewTransform.forward, Vector3.up);
         }
+    }
+
+    private void RefreshFilePicker()
+    {
+        if (!showFilePicker)
+        {
+            return;
+        }
+
+        EnsureFilePickerCanvas();
+
+        for (int i = fileListRoot.childCount - 1; i >= 0; i--)
+        {
+            Destroy(fileListRoot.GetChild(i).gameObject);
+        }
+
+        string directory = GetModelDirectory();
+        if (!Directory.Exists(directory))
+        {
+            AddFilePickerLabel("No folder: " + directory);
+            return;
+        }
+
+        string[] files = GetSupportedModelFiles(directory);
+        if (files.Length == 0)
+        {
+            AddFilePickerLabel("No .ply or .obj files");
+            return;
+        }
+
+        for (int i = 0; i < files.Length; i++)
+        {
+            AddFilePickerButton(files[i]);
+        }
+
+        PositionFilePickerCanvas();
+    }
+
+    private void EnsureFilePickerCanvas()
+    {
+        if (filePickerCanvas != null)
+        {
+            return;
+        }
+
+        EnsureEventSystem();
+
+        GameObject canvasObject = new GameObject("Model File Picker Canvas");
+        canvasObject.transform.SetParent(transform, false);
+        filePickerCanvas = canvasObject.AddComponent<Canvas>();
+        filePickerCanvas.renderMode = RenderMode.WorldSpace;
+        filePickerCanvas.sortingOrder = 20;
+
+        CanvasScaler scaler = canvasObject.AddComponent<CanvasScaler>();
+        scaler.dynamicPixelsPerUnit = 1000f;
+        canvasObject.AddComponent<GraphicRaycaster>();
+        canvasObject.AddComponent<GxrCanvasRaycastable>();
+
+        RectTransform canvasRect = canvasObject.GetComponent<RectTransform>();
+        canvasRect.sizeDelta = filePickerSize;
+
+        Image background = canvasObject.AddComponent<Image>();
+        background.color = new Color(1f, 1f, 1f, 0.08f);
+
+        GameObject listObject = new GameObject("File List");
+        listObject.transform.SetParent(canvasObject.transform, false);
+        fileListRoot = listObject.AddComponent<RectTransform>();
+        fileListRoot.anchorMin = new Vector2(0.04f, 0.04f);
+        fileListRoot.anchorMax = new Vector2(0.96f, 0.96f);
+        fileListRoot.offsetMin = Vector2.zero;
+        fileListRoot.offsetMax = Vector2.zero;
+
+        VerticalLayoutGroup layout = listObject.AddComponent<VerticalLayoutGroup>();
+        layout.spacing = 4f;
+        layout.childControlWidth = true;
+        layout.childControlHeight = true;
+        layout.childForceExpandWidth = true;
+        layout.childForceExpandHeight = false;
+
+        ContentSizeFitter fitter = listObject.AddComponent<ContentSizeFitter>();
+        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        PositionFilePickerCanvas();
+    }
+
+    private void PositionFilePickerCanvas()
+    {
+        if (filePickerCanvas == null)
+        {
+            return;
+        }
+
+        Transform viewTransform = GxrViewReference.Transform;
+        Transform canvasTransform = filePickerCanvas.transform;
+        canvasTransform.localScale = Vector3.one * 0.00075f;
+
+        if (viewTransform != null)
+        {
+            canvasTransform.position = viewTransform.position + viewTransform.forward * filePickerDistanceFromCamera + viewTransform.right * -0.45f;
+            canvasTransform.rotation = Quaternion.LookRotation(canvasTransform.position - viewTransform.position, viewTransform.up);
+        }
+    }
+
+    private void AddFilePickerButton(string path)
+    {
+        GameObject buttonObject = new GameObject(Path.GetFileName(path));
+        buttonObject.transform.SetParent(fileListRoot, false);
+
+        Image image = buttonObject.AddComponent<Image>();
+        image.color = new Color(1f, 1f, 1f, 0.96f);
+
+        Button button = buttonObject.AddComponent<Button>();
+        button.targetGraphic = image;
+        button.onClick.AddListener(() => LoadModel(path));
+
+        LayoutElement layoutElement = buttonObject.AddComponent<LayoutElement>();
+        layoutElement.preferredHeight = 28f;
+
+        AddText(buttonObject.transform, Path.GetFileName(path), 14, TextAnchor.MiddleLeft, Color.black);
+    }
+
+    private void AddFilePickerLabel(string message)
+    {
+        GameObject labelObject = new GameObject("File Picker Message");
+        labelObject.transform.SetParent(fileListRoot, false);
+        LayoutElement layoutElement = labelObject.AddComponent<LayoutElement>();
+        layoutElement.preferredHeight = 90f;
+        AddText(labelObject.transform, message, 22, TextAnchor.MiddleCenter, new Color(0.95f, 0.82f, 0.62f, 1f));
+    }
+
+    private static void AddText(Transform parent, string value, int fontSize, TextAnchor alignment, Color color)
+    {
+        GameObject textObject = new GameObject("Text");
+        textObject.transform.SetParent(parent, false);
+
+        TextMeshProUGUI text = textObject.AddComponent<TextMeshProUGUI>();
+        text.text = value;
+        text.fontSize = fontSize;
+        text.alignment = ToTmpAlignment(alignment);
+        text.color = color;
+        text.enableWordWrapping = false;
+        text.overflowMode = TextOverflowModes.Ellipsis;
+        text.raycastTarget = false;
+
+        RectTransform rectTransform = textObject.GetComponent<RectTransform>();
+        rectTransform.anchorMin = Vector2.zero;
+        rectTransform.anchorMax = Vector2.one;
+        rectTransform.offsetMin = new Vector2(8f, 0f);
+        rectTransform.offsetMax = new Vector2(-8f, 0f);
+    }
+
+    private static TextAlignmentOptions ToTmpAlignment(TextAnchor alignment)
+    {
+        switch (alignment)
+        {
+            case TextAnchor.MiddleCenter:
+                return TextAlignmentOptions.Center;
+            case TextAnchor.MiddleRight:
+                return TextAlignmentOptions.MidlineRight;
+            default:
+                return TextAlignmentOptions.MidlineLeft;
+        }
+    }
+
+    private void HideFilePicker()
+    {
+        if (filePickerCanvas != null)
+        {
+            filePickerCanvas.gameObject.SetActive(false);
+        }
+    }
+
+    private static void EnsureEventSystem()
+    {
+        EventSystem eventSystem = FindObjectOfType<EventSystem>();
+        if (eventSystem == null)
+        {
+            GameObject eventSystemObject = new GameObject("EventSystem");
+            eventSystem = eventSystemObject.AddComponent<EventSystem>();
+        }
+
+        if (eventSystem.GetComponent<GxrInputModule>() == null)
+        {
+            eventSystem.gameObject.AddComponent<GxrInputModule>();
+        }
+    }
+
+    private static string[] GetSupportedModelFiles(string directory)
+    {
+        string[] files = Directory.GetFiles(directory, "*.*", SearchOption.AllDirectories);
+        List<string> supportedFiles = new List<string>();
+
+        for (int i = 0; i < files.Length; i++)
+        {
+            string extension = Path.GetExtension(files[i]).ToLowerInvariant();
+            if (extension == ".ply" || extension == ".obj")
+            {
+                supportedFiles.Add(files[i]);
+            }
+            else if (extension == ".glb")
+            {
+                Debug.LogWarning("[RuntimeModelViewer] Found GLB, but no runtime GLB loader is installed: " + files[i]);
+            }
+        }
+
+        supportedFiles.Sort(StringComparer.OrdinalIgnoreCase);
+        return supportedFiles.ToArray();
     }
 
     private void EnsureSceneBasics()
@@ -602,6 +867,427 @@ public sealed class RuntimeModelViewer : MonoBehaviour
         private static byte ClampByte(double value)
         {
             return (byte)Mathf.Clamp(Mathf.RoundToInt((float)value), 0, 255);
+        }
+    }
+
+    private static class ObjLoader
+    {
+        private struct ObjVertexKey : IEquatable<ObjVertexKey>
+        {
+            public int PositionIndex;
+            public int TexCoordIndex;
+            public int NormalIndex;
+
+            public bool Equals(ObjVertexKey other)
+            {
+                return PositionIndex == other.PositionIndex && TexCoordIndex == other.TexCoordIndex && NormalIndex == other.NormalIndex;
+            }
+
+            public override bool Equals(object obj)
+            {
+                return obj is ObjVertexKey other && Equals(other);
+            }
+
+            public override int GetHashCode()
+            {
+                unchecked
+                {
+                    int hash = PositionIndex;
+                    hash = (hash * 397) ^ TexCoordIndex;
+                    hash = (hash * 397) ^ NormalIndex;
+                    return hash;
+                }
+            }
+        }
+
+        private sealed class MaterialInfo
+        {
+            public Color DiffuseColor = Color.white;
+            public string DiffuseTexturePath;
+        }
+
+        public sealed class Result
+        {
+            public Mesh Mesh;
+            public Material[] Materials;
+        }
+
+        public static Result Load(string path, Material fallbackMaterial)
+        {
+            List<Vector3> sourcePositions = new List<Vector3>();
+            List<Vector2> sourceTexCoords = new List<Vector2>();
+            List<Vector3> sourceNormals = new List<Vector3>();
+            List<Vector3> vertices = new List<Vector3>();
+            List<Vector2> texCoords = new List<Vector2>();
+            List<Vector3> normals = new List<Vector3>();
+            List<List<int>> submeshTriangles = new List<List<int>>();
+            List<string> submeshMaterialNames = new List<string>();
+            Dictionary<ObjVertexKey, int> vertexLookup = new Dictionary<ObjVertexKey, int>();
+            Dictionary<string, MaterialInfo> materialInfos = new Dictionary<string, MaterialInfo>(StringComparer.OrdinalIgnoreCase);
+            string currentMaterialName = string.Empty;
+            int currentSubmeshIndex = GetOrCreateSubmesh(currentMaterialName, submeshMaterialNames, submeshTriangles);
+
+            using (StreamReader reader = new StreamReader(path))
+            {
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    string trimmed = line.Trim();
+                    if (trimmed.Length == 0 || trimmed[0] == '#')
+                    {
+                        continue;
+                    }
+
+                    string[] parts = Split(trimmed);
+                    if (parts.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    if (parts[0] == "v" && parts.Length >= 4)
+                    {
+                        sourcePositions.Add(new Vector3(ParseFloat(parts[1]), ParseFloat(parts[2]), ParseFloat(parts[3])));
+                    }
+                    else if (parts[0] == "vt" && parts.Length >= 3)
+                    {
+                        sourceTexCoords.Add(new Vector2(ParseFloat(parts[1]), ParseFloat(parts[2])));
+                    }
+                    else if (parts[0] == "vn" && parts.Length >= 4)
+                    {
+                        sourceNormals.Add(new Vector3(ParseFloat(parts[1]), ParseFloat(parts[2]), ParseFloat(parts[3])).normalized);
+                    }
+                    else if (parts[0] == "mtllib" && parts.Length >= 2)
+                    {
+                        string mtlPath = ResolveRelativePath(Path.GetDirectoryName(path), JoinParts(parts, 1));
+                        LoadMaterialLibrary(mtlPath, materialInfos);
+                    }
+                    else if (parts[0] == "usemtl" && parts.Length >= 2)
+                    {
+                        currentMaterialName = JoinParts(parts, 1);
+                        currentSubmeshIndex = GetOrCreateSubmesh(currentMaterialName, submeshMaterialNames, submeshTriangles);
+                    }
+                    else if (parts[0] == "f" && parts.Length >= 4)
+                    {
+                        List<int> triangles = submeshTriangles[currentSubmeshIndex];
+                        int first = AddFaceVertex(parts[1], sourcePositions, sourceTexCoords, sourceNormals, vertices, texCoords, normals, vertexLookup);
+                        int previous = AddFaceVertex(parts[2], sourcePositions, sourceTexCoords, sourceNormals, vertices, texCoords, normals, vertexLookup);
+
+                        for (int i = 3; i < parts.Length; i++)
+                        {
+                            int current = AddFaceVertex(parts[i], sourcePositions, sourceTexCoords, sourceNormals, vertices, texCoords, normals, vertexLookup);
+                            triangles.Add(first);
+                            triangles.Add(previous);
+                            triangles.Add(current);
+                            previous = current;
+                        }
+                    }
+                }
+            }
+
+            RemoveEmptySubmeshes(submeshMaterialNames, submeshTriangles);
+
+            if (vertices.Count == 0 || submeshTriangles.Count == 0)
+            {
+                throw new InvalidDataException("OBJ must contain vertices and faces.");
+            }
+
+            Mesh mesh = new Mesh();
+            if (vertices.Count > 65535)
+            {
+                mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+            }
+
+            mesh.SetVertices(vertices);
+            mesh.subMeshCount = submeshTriangles.Count;
+            for (int i = 0; i < submeshTriangles.Count; i++)
+            {
+                mesh.SetTriangles(submeshTriangles[i], i);
+            }
+
+            if (texCoords.Count == vertices.Count)
+            {
+                mesh.SetUVs(0, texCoords);
+            }
+
+            if (normals.Count == vertices.Count)
+            {
+                mesh.SetNormals(normals);
+            }
+            else
+            {
+                mesh.RecalculateNormals();
+            }
+
+            mesh.RecalculateBounds();
+            return new Result
+            {
+                Mesh = mesh,
+                Materials = CreateMaterials(path, submeshMaterialNames, materialInfos, fallbackMaterial)
+            };
+        }
+
+        private static int AddFaceVertex(
+            string value,
+            List<Vector3> sourcePositions,
+            List<Vector2> sourceTexCoords,
+            List<Vector3> sourceNormals,
+            List<Vector3> vertices,
+            List<Vector2> texCoords,
+            List<Vector3> normals,
+            Dictionary<ObjVertexKey, int> vertexLookup)
+        {
+            ObjVertexKey key = ParseFaceVertex(value, sourcePositions.Count, sourceTexCoords.Count, sourceNormals.Count);
+            if (vertexLookup.TryGetValue(key, out int existingIndex))
+            {
+                return existingIndex;
+            }
+
+            if (key.PositionIndex < 0 || key.PositionIndex >= sourcePositions.Count)
+            {
+                throw new InvalidDataException("OBJ face references an invalid vertex index.");
+            }
+
+            int index = vertices.Count;
+            vertices.Add(sourcePositions[key.PositionIndex]);
+
+            if (key.TexCoordIndex >= 0 && key.TexCoordIndex < sourceTexCoords.Count)
+            {
+                texCoords.Add(sourceTexCoords[key.TexCoordIndex]);
+            }
+            else if (texCoords.Count > 0)
+            {
+                texCoords.Add(Vector2.zero);
+            }
+
+            if (key.NormalIndex >= 0 && key.NormalIndex < sourceNormals.Count)
+            {
+                normals.Add(sourceNormals[key.NormalIndex]);
+            }
+            else if (normals.Count > 0)
+            {
+                normals.Add(Vector3.up);
+            }
+
+            vertexLookup.Add(key, index);
+            return index;
+        }
+
+        private static ObjVertexKey ParseFaceVertex(string value, int positionCount, int texCoordCount, int normalCount)
+        {
+            string[] parts = value.Split('/');
+            int positionIndex = ParseObjIndex(parts[0], positionCount);
+            int texCoordIndex = -1;
+            int normalIndex = -1;
+
+            if (parts.Length >= 2 && !string.IsNullOrEmpty(parts[1]))
+            {
+                texCoordIndex = ParseObjIndex(parts[1], texCoordCount);
+            }
+
+            if (parts.Length >= 3 && !string.IsNullOrEmpty(parts[2]))
+            {
+                normalIndex = ParseObjIndex(parts[2], normalCount);
+            }
+
+            return new ObjVertexKey
+            {
+                PositionIndex = positionIndex,
+                TexCoordIndex = texCoordIndex,
+                NormalIndex = normalIndex
+            };
+        }
+
+        private static int GetOrCreateSubmesh(string materialName, List<string> materialNames, List<List<int>> submeshTriangles)
+        {
+            for (int i = 0; i < materialNames.Count; i++)
+            {
+                if (string.Equals(materialNames[i], materialName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return i;
+                }
+            }
+
+            materialNames.Add(materialName);
+            submeshTriangles.Add(new List<int>());
+            return submeshTriangles.Count - 1;
+        }
+
+        private static void RemoveEmptySubmeshes(List<string> materialNames, List<List<int>> submeshTriangles)
+        {
+            for (int i = submeshTriangles.Count - 1; i >= 0; i--)
+            {
+                if (submeshTriangles[i].Count == 0)
+                {
+                    submeshTriangles.RemoveAt(i);
+                    materialNames.RemoveAt(i);
+                }
+            }
+        }
+
+        private static void LoadMaterialLibrary(string path, Dictionary<string, MaterialInfo> materialInfos)
+        {
+            if (!File.Exists(path))
+            {
+                Debug.LogWarning("[RuntimeModelViewer] MTL file not found: " + path);
+                return;
+            }
+
+            string mtlDirectory = Path.GetDirectoryName(path);
+            string currentName = null;
+            MaterialInfo currentInfo = null;
+
+            using (StreamReader reader = new StreamReader(path))
+            {
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    string trimmed = line.Trim();
+                    if (trimmed.Length == 0 || trimmed[0] == '#')
+                    {
+                        continue;
+                    }
+
+                    string[] parts = Split(trimmed);
+                    if (parts.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    if (parts[0] == "newmtl" && parts.Length >= 2)
+                    {
+                        currentName = JoinParts(parts, 1);
+                        currentInfo = new MaterialInfo();
+                        materialInfos[currentName] = currentInfo;
+                    }
+                    else if (currentInfo != null && parts[0] == "Kd" && parts.Length >= 4)
+                    {
+                        currentInfo.DiffuseColor = new Color(ParseFloat(parts[1]), ParseFloat(parts[2]), ParseFloat(parts[3]), 1f);
+                    }
+                    else if (currentInfo != null && parts[0] == "map_Kd" && parts.Length >= 2)
+                    {
+                        currentInfo.DiffuseTexturePath = ResolveRelativePath(mtlDirectory, StripTextureOptions(JoinParts(parts, 1)));
+                    }
+                }
+            }
+        }
+
+        private static Material[] CreateMaterials(string objPath, List<string> materialNames, Dictionary<string, MaterialInfo> materialInfos, Material fallbackMaterial)
+        {
+            Material[] materials = new Material[materialNames.Count];
+            for (int i = 0; i < materialNames.Count; i++)
+            {
+                MaterialInfo info;
+                if (!materialInfos.TryGetValue(materialNames[i], out info))
+                {
+                    materials[i] = new Material(fallbackMaterial);
+                    continue;
+                }
+
+                Material material = new Material(fallbackMaterial);
+                material.name = string.IsNullOrEmpty(materialNames[i]) ? Path.GetFileNameWithoutExtension(objPath) : materialNames[i];
+                material.color = info.DiffuseColor;
+
+                if (!string.IsNullOrEmpty(info.DiffuseTexturePath))
+                {
+                    Texture2D texture = LoadTexture(info.DiffuseTexturePath);
+                    if (texture != null)
+                    {
+                        material.mainTexture = texture;
+                    }
+                }
+
+                materials[i] = material;
+            }
+
+            return materials;
+        }
+
+        private static Texture2D LoadTexture(string path)
+        {
+            if (!File.Exists(path))
+            {
+                Debug.LogWarning("[RuntimeModelViewer] Texture file not found: " + path);
+                return null;
+            }
+
+            byte[] bytes = File.ReadAllBytes(path);
+            Texture2D texture = new Texture2D(2, 2, TextureFormat.RGBA32, true);
+            if (!texture.LoadImage(bytes))
+            {
+                UnityEngine.Object.Destroy(texture);
+                return null;
+            }
+
+            texture.name = Path.GetFileNameWithoutExtension(path);
+            return texture;
+        }
+
+        private static string ResolveRelativePath(string baseDirectory, string relativePath)
+        {
+            string normalized = relativePath.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
+            if (Path.IsPathRooted(normalized))
+            {
+                return normalized;
+            }
+
+            return Path.GetFullPath(Path.Combine(baseDirectory ?? string.Empty, normalized));
+        }
+
+        private static string StripTextureOptions(string value)
+        {
+            string[] parts = Split(value);
+            if (parts.Length == 0)
+            {
+                return value;
+            }
+
+            for (int i = parts.Length - 1; i >= 0; i--)
+            {
+                string candidate = parts[i];
+                string extension = Path.GetExtension(candidate).ToLowerInvariant();
+                if (extension == ".jpg" || extension == ".jpeg" || extension == ".png")
+                {
+                    return candidate;
+                }
+            }
+
+            return value;
+        }
+
+        private static string JoinParts(string[] parts, int startIndex)
+        {
+            if (startIndex >= parts.Length)
+            {
+                return string.Empty;
+            }
+
+            return string.Join(" ", parts, startIndex, parts.Length - startIndex);
+        }
+
+        private static int ParseObjIndex(string value, int count)
+        {
+            int index = int.Parse(value, CultureInfo.InvariantCulture);
+            if (index > 0)
+            {
+                return index - 1;
+            }
+
+            if (index < 0)
+            {
+                return count + index;
+            }
+
+            throw new InvalidDataException("OBJ indices are 1-based and cannot be zero.");
+        }
+
+        private static string[] Split(string value)
+        {
+            return value.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+        }
+
+        private static float ParseFloat(string value)
+        {
+            return float.Parse(value, CultureInfo.InvariantCulture);
         }
     }
 }
