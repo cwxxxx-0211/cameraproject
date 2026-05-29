@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("PcReceiver")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+03516b372040cbbbfeab00b276853d1f7849db41")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+5d6a2f6cb8b138d7166eca34348b142dd003b183")]
 [assembly: System.Reflection.AssemblyProductAttribute("PcReceiver")]
 [assembly: System.Reflection.AssemblyTitleAttribute("PcReceiver")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
